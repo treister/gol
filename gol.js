@@ -19,7 +19,7 @@ class GameOfLife {
         this.cellSize = 4; // Initial cell size
         this.defaultCellSize = 4; // Store default size
         this.minCellSize = 1; // Minimum zoom level
-        this.hue = 0;
+        this.hue = Math.random() * 60 + 120; // Random hue between 120 (green) and 180 (blue)
         this.lastInfoTime = 0;
         this.init();
     }
@@ -141,7 +141,26 @@ class GameOfLife {
                 struct Uniforms {
                     width: u32,
                     height: u32,
+                    hue: f32,
+                    padding: u32,
                 };
+
+                // HSL to RGB conversion
+                fn hsl2rgb(h: f32, s: f32, l: f32) -> vec3f {
+                    let c = (1.0 - abs(2.0 * l - 1.0)) * s;
+                    let x = c * (1.0 - abs(fract(h / 60.0) * 2.0 - 1.0));
+                    let m = l - c/2.0;
+                    var rgb: vec3f;
+                    
+                    if (h < 60.0) { rgb = vec3f(c, x, 0.0); }
+                    else if (h < 120.0) { rgb = vec3f(x, c, 0.0); }
+                    else if (h < 180.0) { rgb = vec3f(0.0, c, x); }
+                    else if (h < 240.0) { rgb = vec3f(0.0, x, c); }
+                    else if (h < 300.0) { rgb = vec3f(x, 0.0, c); }
+                    else { rgb = vec3f(c, 0.0, x); }
+                    
+                    return rgb + m;
+                }
 
                 @fragment
                 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
@@ -150,7 +169,8 @@ class GameOfLife {
                     let index = cell_y * uniforms.width + cell_x;
                     
                     let alive = cells[index] == 1u;
-                    return select(vec4f(0.1, 0.1, 0.1, 1.0), vec4f(0.0, 0.8, 0.4, 1.0), alive);
+                    let cellColor = hsl2rgb(uniforms.hue, 0.8, 0.4);
+                    return select(vec4f(0.1, 0.1, 0.1, 1.0), vec4f(cellColor, 1.0), alive);
                 }
             `
         });
@@ -226,7 +246,8 @@ class GameOfLife {
             size: 16, // 4 bytes each for width, height, hue, and padding
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
-        this.device.queue.writeBuffer(this.uniformBuffer, 0, new Uint32Array([this.width, this.height, 0, 0]));
+        this.device.queue.writeBuffer(this.uniformBuffer, 0, new Uint32Array([this.width, this.height]));
+        this.device.queue.writeBuffer(this.uniformBuffer, 8, new Float32Array([this.hue]));
 
         // Initialize with random state
         this.reset();
@@ -250,6 +271,9 @@ class GameOfLife {
     }
 
     reset() {
+        // Generate new random hue between green (120) and blue (180)
+        this.hue = Math.random() * 60.0 + 120.0;
+        
         const cellsCount = this.width * this.height;
         const initialState = new Uint32Array(cellsCount);
         for (let i = 0; i < cellsCount; i++) {
@@ -292,10 +316,6 @@ class GameOfLife {
             this.cellSize = Math.floor(Math.random() * 8) + 2; // Random size between 2-10
             this.resize();
         }
-
-        // Update hue
-        this.hue = (this.hue + 0.001) % 1.0;
-        this.device.queue.writeBuffer(this.uniformBuffer, 8, new Float32Array([this.hue]));
 
         // Show info every 5 seconds
         if (currentTime - this.lastInfoTime > 5000) {

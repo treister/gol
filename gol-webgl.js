@@ -12,6 +12,7 @@ class GameOfLifeGL {
         this.lastInfoTime = 0;
         this.lastResetTime = Date.now();
         this.isPaused = false;
+        this.hue = Math.random() * 60 + 120; // Random hue between 120 (green) and 180 (blue)
         this.init();
         this.setupControls();
     }
@@ -109,10 +110,30 @@ class GameOfLifeGL {
         const renderShader = this.compileShader(this.gl.FRAGMENT_SHADER, `
             precision mediump float;
             uniform sampler2D state;
+            uniform float hue;
+
+            // HSL to RGB conversion
+            vec3 hsl2rgb(float h, float s, float l) {
+                float c = (1.0 - abs(2.0 * l - 1.0)) * s;
+                float x = c * (1.0 - abs(mod(h / 60.0, 2.0) - 1.0));
+                float m = l - c/2.0;
+                vec3 rgb;
+                
+                if (h < 60.0) rgb = vec3(c, x, 0.0);
+                else if (h < 120.0) rgb = vec3(x, c, 0.0);
+                else if (h < 180.0) rgb = vec3(0.0, c, x);
+                else if (h < 240.0) rgb = vec3(0.0, x, c);
+                else if (h < 300.0) rgb = vec3(x, 0.0, c);
+                else rgb = vec3(c, 0.0, x);
+                
+                return rgb + m;
+            }
+
             varying vec2 uv;
             void main() {
                 float alive = texture2D(state, uv).r;
-                gl_FragColor = alive > 0.5 ? vec4(0.0, 0.8, 0.4, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
+                vec3 cellColor = hsl2rgb(hue, 0.8, 0.4);
+                gl_FragColor = alive > 0.5 ? vec4(cellColor, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
             }
         `);
 
@@ -127,7 +148,8 @@ class GameOfLifeGL {
                 scale: this.gl.getUniformLocation(this.simulationProgram, 'scale')
             },
             render: {
-                state: this.gl.getUniformLocation(this.renderProgram, 'state')
+                state: this.gl.getUniformLocation(this.renderProgram, 'state'),
+                hue: this.gl.getUniformLocation(this.renderProgram, 'hue')
             }
         };
 
@@ -223,6 +245,9 @@ class GameOfLifeGL {
     }
 
     reset() {
+        // Generate new random hue between green (120) and blue (180)
+        this.hue = Math.random() * 60.0 + 120.0;
+        
         const state = new Uint8Array(this.width * this.height * 4);
         for (let i = 0; i < this.width * this.height; i++) {
             const value = Math.random() > 0.5 ? 255 : 0;
@@ -321,6 +346,8 @@ class GameOfLifeGL {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
         this.gl.enableVertexAttribArray(renderPositionLocation);
         this.gl.vertexAttribPointer(renderPositionLocation, 2, this.gl.FLOAT, false, 0, 0);
+
+        this.gl.uniform1f(this.uniforms.render.hue, this.hue);
 
         this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
