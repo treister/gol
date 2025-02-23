@@ -276,11 +276,65 @@ class GameOfLifeGL {
 
     showInfo() {
         const messages = [
-            "Conway's Game of Life, created by mathematician John Conway in 1970, is one of the earliest examples of cellular automata.",
-            "The rules are simple: cells live or die based on their neighbors. Too few or too many neighbors cause death, while just the right amount allows survival.",
-            "This simulation has been used to teach programming concepts for decades, demonstrating how complex patterns can emerge from simple rules.",
-            "Each cell follows just 3 rules: Underpopulation, Overpopulation, and Reproduction.",
-            "Try to spot common patterns like 'gliders', 'blinkers', and 'still lifes' in the simulation!"
+            // Basic Introduction
+            "Conway's Game of Life, created by mathematician John Conway in 1970, was a breakthrough in cellular automata that continues to inspire programmers today.",
+            
+            // Personal Connection
+            "In computer science labs of the 1990s, students would gather around monochrome monitors, watching in wonder as these patterns emerged from simple rules.",
+            
+            // Basic Rules
+            "The rules are beautifully simple: each cell lives or dies based on its neighbors. Too few or too many neighbors cause death, while just the right amount allows survival.",
+            
+            // Historical Context
+            "First implemented on the PDP-7 computer at Bell Labs, Game of Life showed how complex behaviors could emerge from just a few simple rules.",
+            
+            // Educational Value
+            "This simulation became a cornerstone of computer science education, teaching concepts from arrays to parallel processing.",
+            
+            // Pattern Introduction
+            "Watch for common patterns: 'gliders' that move diagonally, 'blinkers' that oscillate, and 'still lifes' that remain unchanged.",
+            
+            // Mathematical Beauty
+            "The Game of Life is Turing complete, meaning it can simulate any computer algorithm, despite its simple ruleset.",
+            
+            // Technical Detail - Basic
+            "Each cell follows three fundamental rules: underpopulation (< 2 neighbors), overpopulation (> 3 neighbors), and reproduction (exactly 3 neighbors).",
+            
+            // Pattern Details
+            "The 'glider' pattern, discovered by Richard K. Guy in 1970, moves across the grid by repeating a cycle of five states.",
+            
+            // Historical Impact
+            "Before Internet forums, programmers would share Life patterns through computer science journals and newsletters.",
+            
+            // Technical Implementation
+            "Modern implementations use parallel processing through GPU shaders, calculating millions of cell states simultaneously.",
+            
+            // Computational Complexity
+            "The infinite version of Life can generate patterns that grow indefinitely, proving its computational unboundedness.",
+            
+            // Advanced Patterns
+            "'Gosper's Glider Gun', discovered in 1970, was the first pattern shown to produce an infinite number of moving objects.",
+            
+            // Modern Applications
+            "Today, Life's principles influence fields from artificial life to cellular automata-based cryptography.",
+            
+            // Technical Detail - Advanced
+            "This implementation uses texture sampling for neighbor calculation, with each pixel representing one cell state.",
+            
+            // Performance Optimization
+            "GPU-based implementations achieve massive parallelism, processing entire generations in a single shader pass.",
+            
+            // Mathematical Properties
+            "Life exhibits both stable and chaotic behaviors, making it a fascinating subject in complexity theory.",
+            
+            // Historical Evolution
+            "From BASIC implementations on 8-bit computers to modern WebGPU shaders, Life continues to evolve with technology.",
+            
+            // Research Impact
+            "Conway's creation has spawned numerous research papers in mathematics, computer science, and artificial life.",
+            
+            // Modern Development
+            "This implementation, created largely using GitHub Copilot, connects the AI-assisted present with Life's rich history in computer science education."
         ];
 
         const overlay = document.getElementById('infoOverlay');
