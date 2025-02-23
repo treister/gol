@@ -1,0 +1,40 @@
+body {
+    margin: 0;
+    background: black;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+canvas {
+    display: block;
+}
+
+#infoOverlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: #00ff80;
+    text-shadow: 0 0 10px rgba(0, 255, 128, 0.5);
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 600px;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    display: none;
+    animation: fadeInOut 8s ease-in-out;
+}
+
+.info-content {
+    font-size: 1.2em;
+    line-height: 1.5;
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
