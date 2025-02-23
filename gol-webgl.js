@@ -6,10 +6,36 @@ const RESET_INTERVAL = 30000; // Reset simulation every 30 seconds
 class GameOfLifeGL {
     constructor() {
         this.cellSize = 4;
+        this.defaultCellSize = 4; // Store default size
+        this.minCellSize = 1; // Minimum zoom level
         this.frameCount = 0;
         this.lastInfoTime = 0;
         this.lastResetTime = Date.now();
+        this.isPaused = false;
         this.init();
+        this.setupControls();
+    }
+
+    setupControls() {
+        // Handle mouse wheel for zoom
+        this.canvas.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            
+            // Calculate new cell size based on scroll direction
+            const delta = Math.sign(event.deltaY);  // Reversed from original
+            const newCellSize = Math.max(1, 
+                                       Math.min(this.cellSize + delta, this.defaultCellSize));
+            
+            if (newCellSize !== this.cellSize) {
+                this.cellSize = newCellSize;
+                this.resize();
+            }
+        });
+
+        // Handle click to pause
+        this.canvas.addEventListener('click', () => {
+            this.isPaused = !this.isPaused;
+        });
     }
 
     async init() {
@@ -243,6 +269,11 @@ class GameOfLifeGL {
     }
 
     render = () => {
+        if (this.isPaused) {
+            requestAnimationFrame(this.render);
+            return;
+        }
+        
         const currentTime = Date.now();
         
         // Show info every 5 seconds

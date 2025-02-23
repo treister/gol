@@ -17,6 +17,8 @@ class GameOfLife {
         this.isPaused = false;
         this.lastResetTime = Date.now();
         this.cellSize = 4; // Initial cell size
+        this.defaultCellSize = 4; // Store default size
+        this.minCellSize = 1; // Minimum zoom level
         this.hue = 0;
         this.lastInfoTime = 0;
         this.init();
@@ -46,6 +48,9 @@ class GameOfLife {
         // Set canvas size to match screen
         this.resize();
         window.addEventListener('resize', () => this.resize());
+
+        // Setup controls after canvas is initialized
+        this.setupControls();
 
         // Configure canvas
         const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -254,15 +259,33 @@ class GameOfLife {
     }
 
     setupControls() {
-        document.getElementById('pauseButton').onclick = () => {
+        // Handle mouse wheel for zoom
+        this.canvas.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            
+            // Calculate new cell size based on scroll direction
+            const delta = Math.sign(event.deltaY);  // Reversed from original
+            const newCellSize = Math.max(1, 
+                                       Math.min(this.cellSize + delta, this.defaultCellSize));
+            
+            if (newCellSize !== this.cellSize) {
+                this.cellSize = newCellSize;
+                this.resize();
+            }
+        });
+
+        // Handle click to pause
+        this.canvas.addEventListener('click', () => {
             this.isPaused = !this.isPaused;
-        };
-        document.getElementById('resetButton').onclick = () => {
-            this.reset();
-        };
+        });
     }
 
     render = () => {
+        if (this.isPaused) {
+            requestAnimationFrame(this.render);
+            return;
+        }
+
         const currentTime = Date.now();
         if (currentTime - this.lastResetTime > 30000) { // 30 seconds
             this.lastResetTime = currentTime;
