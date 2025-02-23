@@ -1,137 +1,158 @@
-class GameOfLifeWebGL {
-    constructor() {
-        this.isPaused = false;
-        this.lastResetTime = Date.now();
-        this.cellSize = 4;
-        this.hue = 0;
-        this.lastInfoTime = 0;
-        this.debug = true;
-        
-        // Add pause/reset controls
-        document.addEventListener('keypress', (e) => {
-            if (e.key === ' ') {
-                this.isPaused = !this.isPaused;
-            } else if (e.key === 'r') {
-                this.reset();
-            }
-        });
+// Constants
+const CELL_SIZE = 4;
+const DEBUG_INTERVAL = 5000; // Log debug info every 5 seconds
+const RESET_INTERVAL = 30000; // Reset simulation every 30 seconds
 
+class GameOfLifeGL {
+    constructor() {
+        this.cellSize = 4;
+        this.frameCount = 0;
+        this.lastInfoTime = 0;
+        this.lastResetTime = Date.now();
         this.init();
     }
 
-    init() {
+    async init() {
+        // Setup canvas
         this.canvas = document.getElementById('gameCanvas');
-        this.gl = this.canvas.getContext('webgl2');
-        
+        this.canvas.style.width = '100vw';
+        this.canvas.style.height = '100vh';
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+
+        // Get WebGL context
+        this.gl = this.canvas.getContext('webgl', { antialias: false });
         if (!this.gl) {
-            this.gl = this.canvas.getContext('webgl') || this.canvas.getContext('experimental-webgl');
-            if (!this.gl) {
-                alert('Neither WebGL2 nor WebGL1 is supported on your browser');
-                return;
-            }
-            console.log('Using WebGL 1 as fallback');
-        } else {
-            console.log('Using WebGL 2');
+            console.error('WebGL not supported');
+            return;
         }
 
-        console.log('Canvas dimensions:', this.canvas.width, 'x', this.canvas.height);
+        // Calculate grid dimensions
+        this.width = Math.floor(this.canvas.width / this.cellSize);
+        this.height = Math.floor(this.canvas.height / this.cellSize);
 
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
-        
-        try {
-            this.createShaders();
-            this.createBuffers();
-            this.render();
-        } catch (e) {
-            console.error('Error during initialization:', e);
-        }
-    }
-
-    checkGLError(where) {
-        if (!this.debug) return;
-        const err = this.gl.getError();
-        if (err !== this.gl.NO_ERROR) {
-            console.error(`GL Error at ${where}:`, err);
-            console.trace();
-        }
-    }
-
-    createShaders() {
-        const vsSource = `#version 300 es
-            in vec2 position;
-            out vec2 uv;
+        // Create two shaders - one for rendering and one for simulation
+        const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, `
+            attribute vec2 position;
+            varying vec2 uv;
             void main() {
-                gl_Position = vec4(position, 0.0, 1.0);
                 uv = position * 0.5 + 0.5;
+                gl_Position = vec4(position, 0.0, 1.0);
             }
-        `;
+        `);
 
-        const fsSource = `#version 300 es
-            precision highp float;
+        // Simulation shader
+        const simulationShader = this.compileShader(this.gl.FRAGMENT_SHADER, `
+            precision mediump float;
             uniform sampler2D state;
-            uniform vec2 resolution;
-            in vec2 uv;
-            out vec4 fragColor;
-            
-            int getCell(vec2 coord) {
-                vec2 wrappedCoord = mod(coord, resolution) / resolution;
-                return texture(state, wrappedCoord).r > 0.5 ? 1 : 0;
+            uniform vec2 scale;
+            varying vec2 uv;
+
+            int getCell(vec2 offset) {
+                vec2 coord = fract(uv + offset * scale);
+                return texture2D(state, coord).r > 0.5 ? 1 : 0;
             }
-            
+
             void main() {
-                vec2 texel = floor(uv * resolution);
-                
-                // Count live neighbors
-                int sum = 0;
-                for(int y = -1; y <= 1; y++) {
-                    for(int x = -1; x <= 1; x++) {
-                        if(x == 0 && y == 0) continue;
-                        vec2 offset = texel + vec2(x, y);
-                        sum += getCell(offset);
-                    }
-                }
-                
-                // Apply Game of Life rules
-                int current = getCell(texel);
-                float next = 0.0;
-                
-                if(current == 1) {
-                    next = (sum == 2 || sum == 3) ? 1.0 : 0.0;
+                int sum = 
+                    getCell(vec2(-1.0, -1.0)) +
+                    getCell(vec2(-1.0,  0.0)) +
+                    getCell(vec2(-1.0,  1.0)) +
+                    getCell(vec2( 0.0, -1.0)) +
+                    getCell(vec2( 0.0,  1.0)) +
+                    getCell(vec2( 1.0, -1.0)) +
+                    getCell(vec2( 1.0,  0.0)) +
+                    getCell(vec2( 1.0,  1.0));
+
+                float current = texture2D(state, uv).r;
+                float alive = current;
+
+                if (current > 0.5) {
+                    // Cell is alive
+                    alive = float(sum == 2 || sum == 3);
                 } else {
-                    next = (sum == 3) ? 1.0 : 0.0;
+                    // Cell is dead
+                    alive = float(sum == 3);
                 }
 
-                // When rendering to framebuffer, store just the state
-                if (gl_FragCoord.x <= resolution.x && gl_FragCoord.y <= resolution.y) {
-                    fragColor = vec4(next, next, next, 1.0);
-                } else {
-                    // When rendering to screen, show colors
-                    fragColor = next > 0.5 ? 
-                        vec4(0.0, 0.8, 0.4, 1.0) :  // Bright green for live cells
-                        vec4(0.1, 0.1, 0.1, 1.0);   // Dark gray for dead cells
-                }
+                gl_FragColor = vec4(alive, alive, alive, 1.0);
             }
-        `;
+        `);
 
-        const vertexShader = this.compileShader(vsSource, this.gl.VERTEX_SHADER);
-        const fragmentShader = this.compileShader(fsSource, this.gl.FRAGMENT_SHADER);
-        
-        this.program = this.createProgram(vertexShader, fragmentShader);
+        // Render shader
+        const renderShader = this.compileShader(this.gl.FRAGMENT_SHADER, `
+            precision mediump float;
+            uniform sampler2D state;
+            varying vec2 uv;
+            void main() {
+                float alive = texture2D(state, uv).r;
+                gl_FragColor = alive > 0.5 ? vec4(0.0, 0.8, 0.4, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
+            }
+        `);
 
-        // Get locations
-        this.positionLocation = this.gl.getAttribLocation(this.program, 'position');
-        this.stateLocation = this.gl.getUniformLocation(this.program, 'state');
-        this.resolutionLocation = this.gl.getUniformLocation(this.program, 'resolution');
+        // Create programs and cache uniform locations
+        this.simulationProgram = this.createProgram(vertexShader, simulationShader);
+        this.renderProgram = this.createProgram(vertexShader, renderShader);
+
+        // Cache uniform locations
+        this.uniforms = {
+            simulation: {
+                state: this.gl.getUniformLocation(this.simulationProgram, 'state'),
+                scale: this.gl.getUniformLocation(this.simulationProgram, 'scale')
+            },
+            render: {
+                state: this.gl.getUniformLocation(this.renderProgram, 'state')
+            }
+        };
+
+        // Create vertex buffer
+        const vertices = new Float32Array([
+            -1, -1,
+            1, -1,
+            -1, 1,
+            1, 1
+        ]);
+
+        this.vertexBuffer = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+
+        // Create textures and framebuffers
+        this.textures = [
+            this.createTexture(),
+            this.createTexture()
+        ];
+
+        this.framebuffers = this.textures.map(texture => {
+            const fb = this.gl.createFramebuffer();
+            this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, fb);
+            this.gl.framebufferTexture2D(
+                this.gl.FRAMEBUFFER,
+                this.gl.COLOR_ATTACHMENT0,
+                this.gl.TEXTURE_2D,
+                texture,
+                0
+            );
+            return fb;
+        });
+
+        // Initialize state
+        this.reset();
+
+        // Start animation
+        requestAnimationFrame(this.render);
+
+        // Add resize listener
+        window.addEventListener('resize', () => this.resize());
     }
 
-    compileShader(source, type) {
+    compileShader(type, source) {
         const shader = this.gl.createShader(type);
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
         
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            console.error('Shader compile error:', this.gl.getShaderInfoLog(shader));
+            console.error('Shader compilation error:', this.gl.getShaderInfoLog(shader));
             this.gl.deleteShader(shader);
             return null;
         }
@@ -143,64 +164,12 @@ class GameOfLifeWebGL {
         this.gl.attachShader(program, vertexShader);
         this.gl.attachShader(program, fragmentShader);
         this.gl.linkProgram(program);
-
+        
         if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-            console.error('Program link error:', this.gl.getProgramInfoLog(program));
+            console.error('Program linking error:', this.gl.getProgramInfoLog(program));
             return null;
         }
         return program;
-    }
-
-    createBuffers() {
-        // Create vertex buffer
-        const vertices = new Float32Array([
-            -1, -1,
-            1, -1,
-            -1, 1,
-            -1, 1,
-            1, -1,
-            1, 1
-        ]);
-
-        this.vertexBuffer = this.gl.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
-
-        // Create two textures for ping-pong rendering
-        this.textures = [
-            this.createTexture(),
-            this.createTexture()
-        ];
-
-        // Create framebuffers
-        this.framebuffers = [
-            this.createFramebuffer(this.textures[0]),
-            this.createFramebuffer(this.textures[1])
-        ];
-
-        // Initialize first texture with random state
-        const state = new Uint8Array(this.width * this.height * 4);
-        for (let i = 0; i < this.width * this.height; i++) {
-            const value = Math.random() > 0.5 ? 255 : 0;
-            const idx = i * 4;
-            state[idx] = value;     // R
-            state[idx + 1] = value; // G
-            state[idx + 2] = value; // B
-            state[idx + 3] = 255;   // A
-        }
-
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[0]);
-        this.gl.texImage2D(
-            this.gl.TEXTURE_2D,
-            0,
-            this.gl.RGBA,
-            this.width,
-            this.height,
-            0,
-            this.gl.RGBA,
-            this.gl.UNSIGNED_BYTE,
-            state
-        );
     }
 
     createTexture() {
@@ -218,46 +187,13 @@ class GameOfLifeWebGL {
             this.gl.UNSIGNED_BYTE,
             null
         );
-
+        
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
-
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+        
         return texture;
-    }
-
-    createFramebuffer(texture) {
-        const fb = this.gl.createFramebuffer();
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, fb);
-        this.gl.framebufferTexture2D(
-            this.gl.FRAMEBUFFER,
-            this.gl.COLOR_ATTACHMENT0,
-            this.gl.TEXTURE_2D,
-            texture,
-            0
-        );
-        return fb;
-    }
-
-    resize() {
-        const scale = window.devicePixelRatio;
-        this.canvas.width = window.innerWidth * scale;
-        this.canvas.height = window.innerHeight * scale;
-        this.canvas.style.width = '100vw';
-        this.canvas.style.height = '100vh';
-        
-        this.width = Math.floor(this.canvas.width / this.cellSize);
-        this.height = Math.floor(this.canvas.height / this.cellSize);
-        
-        console.log('Resized to:', {
-            canvas: `${this.canvas.width}x${this.canvas.height}`,
-            grid: `${this.width}x${this.height}`
-        });
-        
-        if (this.gl) {
-            this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        }
     }
 
     reset() {
@@ -270,70 +206,21 @@ class GameOfLifeWebGL {
             state[idx + 2] = value; // B
             state[idx + 3] = 255;   // A
         }
-        
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[0]);
-        this.gl.texImage2D(
-            this.gl.TEXTURE_2D,
-            0,
-            this.gl.RGBA,
-            this.width,
-            this.height,
-            0,
-            this.gl.RGBA,
-            this.gl.UNSIGNED_BYTE,
-            state
-        );
-    }
 
-    render = () => {
-        if (this.isPaused) {
-            requestAnimationFrame(this.render);
-            return;
-        }
-
-        const currentTime = Date.now();
-        if (currentTime - this.lastResetTime > 30000) { // Reset every 30 seconds
-            this.lastResetTime = currentTime;
-            this.reset();
-        }
-
-        if (currentTime - this.lastInfoTime > 5000) { // Show info every 5 seconds
-            this.lastInfoTime = currentTime;
-            this.showInfo();
-        }
-
-        // Step 1: Update simulation (render to framebuffer)
-        this.gl.useProgram(this.program);
-        
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.enableVertexAttribArray(this.positionLocation);
-        this.gl.vertexAttribPointer(this.positionLocation, 2, this.gl.FLOAT, false, 0, 0);
-        
-        this.gl.uniform2f(this.resolutionLocation, this.width, this.height);
-        
-        // Bind input texture
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[0]);
-        this.gl.uniform1i(this.stateLocation, 0);
-
-        // Render to the other texture
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffers[1]);
-        this.gl.viewport(0, 0, this.width, this.height);
-        this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-
-        // Step 2: Render to screen
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Use updated state
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[1]);
-        this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-
-        // Swap textures for next frame
-        [this.textures[0], this.textures[1]] = [this.textures[1], this.textures[0]];
-        [this.framebuffers[0], this.framebuffers[1]] = [this.framebuffers[1], this.framebuffers[0]];
-
-        requestAnimationFrame(this.render);
+        this.textures.forEach(texture => {
+            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+            this.gl.texImage2D(
+                this.gl.TEXTURE_2D,
+                0,
+                this.gl.RGBA,
+                this.width,
+                this.height,
+                0,
+                this.gl.RGBA,
+                this.gl.UNSIGNED_BYTE,
+                state
+            );
+        });
     }
 
     showInfo() {
@@ -346,15 +233,7 @@ class GameOfLifeWebGL {
         ];
 
         const overlay = document.getElementById('infoOverlay');
-        if (!overlay) {
-            console.error('Info overlay element not found');
-            return;
-        }
         const content = overlay.querySelector('.info-content');
-        if (!content) {
-            console.error('Info content element not found');
-            return;
-        }
         content.textContent = messages[Math.floor(Math.random() * messages.length)];
         overlay.style.display = 'block';
         
@@ -362,6 +241,118 @@ class GameOfLifeWebGL {
             overlay.style.display = 'none';
         }, 5000);
     }
+
+    render = () => {
+        const currentTime = Date.now();
+        
+        // Show info every 5 seconds
+        if (currentTime - this.lastInfoTime > 5000) {
+            this.lastInfoTime = currentTime;
+            this.showInfo();
+        }
+
+        // Reset every 30 seconds with new cell size
+        if (currentTime - this.lastResetTime > 30000) {
+            this.lastResetTime = currentTime;
+            this.cellSize = Math.floor(Math.random() * 8) + 2; // Random size between 2-10
+            this.resize();
+        }
+
+        // Simulation step
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffers[1]);
+        this.gl.viewport(0, 0, this.width, this.height);
+        this.gl.useProgram(this.simulationProgram);
+
+        // Bind input texture to texture unit 0
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[0]);
+        this.gl.uniform1i(this.uniforms.simulation.state, 0);
+        this.gl.uniform2f(this.uniforms.simulation.scale, 1.0/this.width, 1.0/this.height);
+
+        const positionLocation = this.gl.getAttribLocation(this.simulationProgram, 'position');
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.enableVertexAttribArray(positionLocation);
+        this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+        // Render step
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        this.gl.useProgram(this.renderProgram);
+
+        // Bind simulation result to texture unit 1
+        this.gl.activeTexture(this.gl.TEXTURE1);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[1]);
+        this.gl.uniform1i(this.uniforms.render.state, 1);
+
+        const renderPositionLocation = this.gl.getAttribLocation(this.renderProgram, 'position');
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.enableVertexAttribArray(renderPositionLocation);
+        this.gl.vertexAttribPointer(renderPositionLocation, 2, this.gl.FLOAT, false, 0, 0);
+
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+        // Swap buffers
+        [this.textures[0], this.textures[1]] = [this.textures[1], this.textures[0]];
+        [this.framebuffers[0], this.framebuffers[1]] = [this.framebuffers[1], this.framebuffers[0]];
+
+        // Update debug info
+        const debugDiv = document.getElementById('debug-info');
+        if (debugDiv) {
+            debugDiv.textContent = `Game of Life:
+Grid: ${this.width}x${this.height}
+FPS: ${Math.round(this.frameCount++ / (performance.now() / 1000))}
+Frame: ${this.frameCount}`;
+        }
+
+        requestAnimationFrame(this.render);
+    }
+
+    resize() {
+        const scale = window.devicePixelRatio;
+        this.canvas.width = window.innerWidth * scale;
+        this.canvas.height = window.innerHeight * scale;
+        this.canvas.style.width = '100vw';
+        this.canvas.style.height = '100vh';
+        
+        // Recalculate grid dimensions
+        this.width = Math.floor(this.canvas.width / this.cellSize);
+        this.height = Math.floor(this.canvas.height / this.cellSize);
+        
+        // Set the viewport
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Recreate textures and framebuffers with new size
+        if (this.textures) {
+            // Cleanup existing textures and framebuffers
+            this.textures.forEach(texture => this.gl.deleteTexture(texture));
+            this.framebuffers.forEach(fb => this.gl.deleteFramebuffer(fb));
+            
+            // Create new textures and framebuffers
+            this.textures = [
+                this.createTexture(),
+                this.createTexture()
+            ];
+            
+            this.framebuffers = this.textures.map(texture => {
+                const fb = this.gl.createFramebuffer();
+                this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, fb);
+                this.gl.framebufferTexture2D(
+                    this.gl.FRAMEBUFFER,
+                    this.gl.COLOR_ATTACHMENT0,
+                    this.gl.TEXTURE_2D,
+                    texture,
+                    0
+                );
+                return fb;
+            });
+            
+            // Reset the simulation with new dimensions
+            this.reset();
+        }
+    }
 }
 
-new GameOfLifeWebGL(); 
+// Initialize
+new GameOfLifeGL();
