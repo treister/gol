@@ -334,7 +334,7 @@ class GameOfLifeGL {
             "Conway's creation has spawned numerous research papers in mathematics, computer science, and artificial life.",
             
             // Modern Development
-            "This implementation, created largely using GitHub Copilot, connects the AI-assisted present with Life's rich history in computer science education."
+            "This implementation, created largely using Cursor / Claude, connects the AI-assisted present with Life's rich history in computer science education."
         ];
 
         const overlay = document.getElementById('infoOverlay');
