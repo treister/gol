@@ -24,7 +24,15 @@ class GameOfLife {
 
     async init() {
         if (!navigator.gpu) {
-            alert('WebGPU not supported! Please use Chrome Canary or Edge Canary with WebGPU enabled.');
+            console.log('WebGPU not supported, falling back to WebGL implementation');
+            // Remove current script and load WebGL version
+            const oldScript = document.querySelector('script[src="gol.js"]');
+            oldScript.remove();
+            
+            const script = document.createElement('script');
+            script.src = 'gol-webgl.js';
+            script.type = 'module';
+            document.body.appendChild(script);
             return;
         }
 
