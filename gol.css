@@ -20,8 +20,9 @@ canvas {
     background: rgba(0, 0, 0, 0.85);
     color: #00ff80;
     text-shadow: 0 0 10px rgba(0, 255, 128, 0.5);
-    padding: 20px;
+    padding: min(20px, 5vw);
     border-radius: 10px;
+    width: 90%;
     max-width: 600px;
     text-align: center;
     font-family: Arial, sans-serif;
@@ -30,7 +31,7 @@ canvas {
 }
 
 .info-content {
-    font-size: 1.2em;
+    font-size: clamp(1rem, 4vw, 1.2rem);
     line-height: 1.5;
 }
 
